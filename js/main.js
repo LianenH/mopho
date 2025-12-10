@@ -69,13 +69,17 @@ function initNetwork() {
 
 // 模拟指挥官功能 (你可以做个隐藏按钮来触发这个)
 // 在控制台输入: window.conductorFire() 即可全场同步
-window.conductorFire = () => {
+// 必须这样写，强行把它挂到全局窗口对象上
+window.conductorFire = function() {
     if(state.channel) {
+        console.log("BOOM! Firing signal...");
         state.channel.send({
             type: 'broadcast',
             event: 'pulse',
             payload: { type: 'GLOBAL' }
         });
+    } else {
+        console.warn("Channel not connected yet!");
     }
 };
 

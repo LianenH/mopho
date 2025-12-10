@@ -1,9 +1,9 @@
-/* main.js - Serverless Edition */
-// 引入 Supabase (从 CDN)
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
 import { audioEngine } from "./audioEngine.js";
 import { acousticLink } from "./acousticLink.js";
 import { visualizer } from "./visuals.js";
+
+// 从全局对象获取 Supabase
+const { createClient } = window.supabase;
 
 // === 🔴 这里填你刚刚复制的 Supabase 信息 ===
 const SUPABASE_URL = 'https://zglucpcifwibdphnavsa.supabase.co';

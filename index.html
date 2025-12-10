@@ -1,19 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
+<!-- index.html -->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Synaptic Symphony</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/ggwave@0.0.3/ggwave.js"></script>
+
+    <!-- 1. 修复 ggwave: 使用 unpkg 源，它更稳定 -->
+    <script src="https://unpkg.com/ggwave@0.0.3/ggwave.js"></script>
+    
+    <!-- 2. 修复 Supabase: 使用全局脚本方式加载，这就不会报 "H is null" 了 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body>
-    <div id="overlay">
-        <div class="content">
-            <h1>TAP TO SYNC</h1>
-            <p>Bio-Acoustic Mesh Network</p>
-        </div>
-    </div>
-    <script type="module" src="./js/main.js"></script>
-</body>
-</html>

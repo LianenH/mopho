@@ -1,52 +1,47 @@
+/* js/audioEngine.js */
 import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
+import { synthCompiler } from './dynamicSynth.js'; // 确保这个文件还在
 
 let theChuck;
-
-const chuckCode = `
-SinOsc mod => SinOsc car => ADSR env => NRev rev => dac;
-
-2 => car.sync;
-440.0 => float baseFreq;
-1.0 => float ratio;
-200.0 => float index;
-
-0.1 => rev.mix;
-env.set(5::ms, 10::ms, 0.0, 0::ms);
-
-global float inputFreq;
-global Event trigger;
-
-function void soundLoop() {
-    while(true) {
-        inputFreq => baseFreq;
-        baseFreq => car.freq;
-        baseFreq * ratio => mod.freq;
-        index => mod.gain;
-
-        trigger => now;
-
-        Math.random2f(0.99, 1.01) * baseFreq => car.freq;
-        1 => env.keyOn;
-        50::ms => now;
-        1 => env.keyOff;
-    }
-}
-spork ~ soundLoop();
-while(true) { 1::second => now; }
-`;
+let currentShredID = null;
 
 export const audioEngine = {
     async init() {
-        theChuck = await Chuck.init([]);
-        await theChuck.runCode(chuckCode);
-        theChuck.setFloat("inputFreq", 440);
+        if (!theChuck) {
+            console.log("🎵 Loading WebChucK...");
+            theChuck = await Chuck.init([]);
+            console.log("🎵 WebChucK Ready.");
+        }
     },
 
-    updatePitch(freq) {
-        if(theChuck) theChuck.setFloat("inputFreq", freq);
+    async updateInstrument(config) {
+        if (!theChuck) return;
+        if (currentShredID) {
+            await theChuck.removeShred(currentShredID);
+        }
+        // 如果 synthCompiler 还没准备好，用个简单的备用
+        const code = synthCompiler ? synthCompiler.compile(config) : `
+            SinOsc osc => ADSR env => dac;
+            0.5 => osc.gain;
+            env.set(10::ms, 50::ms, 0.5, 200::ms);
+            global float inputPitch;
+            global Event noteOn;
+            while(true) {
+                noteOn => now;
+                inputPitch => osc.freq;
+                1 => env.keyOn;
+                100::ms => now;
+                1 => env.keyOff;
+                200::ms => now;
+            }
+        `;
+        currentShredID = await theChuck.runCode(code);
     },
 
-    triggerSound() {
-        if(theChuck) theChuck.broadcastEvent("trigger");
+    triggerNote(freq) {
+        if (theChuck) {
+            theChuck.setFloat("inputPitch", freq);
+            theChuck.broadcastEvent("noteOn");
+        }
     }
 };

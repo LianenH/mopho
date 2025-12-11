@@ -1,89 +1,95 @@
-/* js/main.js - SELF STARTING VERSION */
+/* js/main.js - RIPPLE INTERACTION EDITION */
 import { audioEngine } from "./audioEngine.js";
 import { visualizer } from "./visuals.js";
-// Supabase Config
+
 const SUPABASE_URL = 'https://zglucpcifwibdphnavsa.supabase.co'; 
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnbHVjcGNpZndpYmRwaG5hdnNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNjg5NzAsImV4cCI6MjA4MDg0NDk3MH0.NLesbKu9M31zKjlux8m6sUQ-3yaE6zvY7W-hv1Li1gk'; 
-// Bio Config
-const BIO_CONFIG = { BASE_SPEED: 0.02, COUPLING: 0.1, BROADCAST_RATE: 0.5 };
-let state = { isReady: false, supabase: null, channel: null, phase: Math.random(), isRunning: false };
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnbHVjcGNpZndpYmRwaG5hdnNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNjg5NzAsImV4cCI6MjA4MDg0NDk3MH0.NLesbKu9M31zKjlux8m6sUQ-3yaE6zvY7W-hv1Li1gk';  
 
-// === 1. Test Function (Run this in console to verify sound!) ===
-window.testSound = function() {
-    console.log("🎵 Testing Sound Engine Direct...");
-    audioEngine.triggerNote(440);
+let state = {
+    isReady: false,
+    supabase: null,
+    channel: null
 };
 
-// === 2. Conductor Function ===
-window.conductorFire = function() {
-    console.log("🔥 ACTIVATING SWARM (Local + Network)...");
-    // 1. Force start local loop immediately (Fix for single device)
-    state.isRunning = true; 
-    // 2. Play a sound immediately to confirm
-    triggerPulse();
-    // 3. Send to network
-    if (state.channel) {
-        state.channel.send({ type: 'broadcast', event: 'swarm_control', payload: { cmd: 'START' } });
-    }
-};
-
-// === 3. Init Logic ===
+// === 1. 初始化 Supabase ===
 if (window.supabase) {
     state.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 }
+
+// === 2. 点击屏幕：加入网络并触发涟漪 ===
 const overlay = document.getElementById('overlay');
 if (overlay) {
     overlay.addEventListener('click', async () => {
         if (state.isReady) return;
-        console.log("🚀 System Init...");
+        
+        console.log("🌊 Joining the ocean...");
+        
         try {
-            // Must resume context on click
             await audioEngine.init();
-            // Start instrument
-            await audioEngine.updateInstrument({ cutoff: 2000, release: 1500 });
+            // 加载一个空灵的声音
+            await audioEngine.updateInstrument({}); 
+            
             initNetwork();
+            
             state.isReady = true;
             visualizer.setMode("IDLE");
             overlay.style.display = 'none';
-            // Start the loop logic
-            requestAnimationFrame(fireflyLoop);
+
+            // 🔥 核心：我进来了，大喊一声 "HELLO"
+            // 这会触发我自己和所有人的涟漪
+            announceArrival();
+            
         } catch (e) {
-            alert("Init Error: " + e.message);
+            alert("Error: " + e.message);
         }
     });
 }
 
 function initNetwork() {
     if (!state.supabase) return;
+
     state.channel = state.supabase.channel('room-1');
+
     state.channel
-        .on('broadcast', { event: 'swarm_control' }, (payload) => {
-            if (payload.cmd === 'START') state.isRunning = true;
-        })
-        .on('broadcast', { event: 'flash' }, () => {
-            if (state.isRunning) state.phase += BIO_CONFIG.COUPLING;
+        .on('broadcast', { event: 'arrival' }, (payload) => {
+            // 👂 听到有人进来了（或者我自己进来了）
+            console.log("💧 Ripple detected!");
+            triggerRipple();
         })
         .subscribe((status) => {
-            if (status === 'SUBSCRIBED') console.log("🟢 Connected.");
+            if (status === 'SUBSCRIBED') {
+                console.log("🟢 Network Connected.");
+            }
         });
 }
 
-function fireflyLoop() {
-    if (state.isRunning) {
-        state.phase += BIO_CONFIG.BASE_SPEED;
-        if (state.phase >= 1.0) {
-            state.phase -= 1.0;
-            triggerPulse();
-            if (Math.random() < BIO_CONFIG.BROADCAST_RATE && state.channel) {
-                state.channel.send({ type: 'broadcast', event: 'flash', payload: {} });
-            }
+// 广播我的到来
+function announceArrival() {
+    // 延迟一点点，确保连接建立
+    setTimeout(() => {
+        if (state.channel) {
+            state.channel.send({
+                type: 'broadcast',
+                event: 'arrival',
+                payload: { msg: 'New Device Joined' }
+            });
+            // 为了保险，我自己先响一声
+            triggerRipple();
         }
-    }
-    requestAnimationFrame(fireflyLoop);
+    }, 500);
 }
 
-function triggerPulse() {
+// 触发涟漪效果
+function triggerRipple() {
+    // 1. 视觉呼吸
     visualizer.flash();
-    // Trigger sound
-    audioEngine.triggerNote(440);
+    
+    // 2. 声音：每个人延迟时间不同，形成扩散感
+    // 比如 0ms - 1000ms 的随机延迟
+    const delay = Math.random() * 1000;
+    
+    setTimeout(() => {
+        // 触发一个随机音高的空灵音符
+        audioEngine.triggerNote(400 + Math.random() * 400);
+    }, delay);
 }

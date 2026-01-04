@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Air Chimes</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+    <style>
+        body {
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        h1 { font-size: 1.2rem; margin-bottom: 10px; border-bottom: 1px solid #fff; padding-bottom: 5px; }
+        .controls { display: flex; flex-direction: column; gap: 15px; margin-bottom: 15px; }
+        .slider-group { display: flex; align-items: center; justify-content: space-between; }
+        label { font-size: 0.9rem; }
+        input[type=range] { width: 60%; accent-color: #fff; }
+        .editor-container { flex-grow: 1; border: 1px solid #333; position: relative; }
+        .CodeMirror { height: 100%; font-size: 14px; }
+        button {
+            background: #fff;
+            color: #000;
+            border: none;
+            padding: 15px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            text-transform: uppercase;
+        }
+        button:active { background: #ccc; }
+        #status { font-size: 0.8rem; color: #666; margin-top: 5px; text-align: right; }
+    </style>
+</head>
+<body>
+    <h1>AIR CHIMES // MARK TREE</h1>
+    
+    <div class="controls">
+        <div class="slider-group">
+            <label>THRESHOLD</label>
+            <input type="range" id="param1" min="0" max="100" value="10">
+        </div>
+        <div class="slider-group">
+            <label>DENSITY</label>
+            <input type="range" id="param2" min="1" max="20" value="10">
+        </div>
+    </div>
+
+    <div class="editor-container">
+        <textarea id="codeEditor"></textarea>
+    </div>
+
+    <button id="toggleBtn">INITIALIZE</button>
+    <div id="status">SYSTEM: STANDBY</div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/clike/clike.min.js"></script>
+    <script type="module" src="https://chuck.stanford.edu/webchuck/src/webchuck_host.js"></script>
+    <script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -1,33 +1,34 @@
 import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
+// 【关键修改】这里不再用 ModalBar，改用 SinOsc (正弦波)
+// 如果这个能响，说明音频没问题，是之前的乐器太复杂了
 const DEFAULT_CODE = `
 global float inputVelocity;
 global float paramThreshold;
 global float paramDensity;
 
-ModalBar chime => NRev rev => dac;
-1 => chime.preset;
-0.1 => rev.mix;
+// 简单的正弦波 (像救护车的声音)
+SinOsc osc => dac;
+0.0 => osc.gain; // 初始静音
 
 function void triggerNote(float velocity) {
-    Math.random2f(2000, 4000) => chime.freq;
-    velocity => chime.noteOn;
+    // 随机音高
+    Math.random2f(440, 880) => osc.freq;
+    // 声音瞬间变大
+    0.5 => osc.gain;
+    // 100ms 后声音消失
+    100::ms => now;
+    0.0 => osc.gain;
 }
 
 while(true) {
     if (inputVelocity > paramThreshold) {
         triggerNote(inputVelocity);
         
-        float waitTime;
-        if (paramDensity > 0) {
-            1.0 / paramDensity => waitTime;
-        } else {
-            0.1 => waitTime;
-        }
-        
-        Math.random2f(waitTime * 0.5, waitTime * 1.5)::second => now;
+        // 简单的延时逻辑
+        100::ms => now;
     } else {
-        0.05::second => now;
+        10::ms => now;
     }
 }
 `;
@@ -95,9 +96,10 @@ class App {
 
     async init() {
         this.ui.btn.disabled = true;
-        this.ui.status.innerText = "INITIALIZING...";
+        this.ui.status.innerText = "STARTING AUDIO ENGINE...";
 
         try {
+            // 1. 传感器权限
             if (typeof DeviceMotionEvent !== 'undefined' && 
                 typeof DeviceMotionEvent.requestPermission === 'function') {
                 const permission = await DeviceMotionEvent.requestPermission();
@@ -106,20 +108,39 @@ class App {
 
             window.addEventListener('devicemotion', (e) => this.handleMotion(e));
             
+            // 2. 初始化 Chuck
             this.chuck = await Chuck.init([]);
+
+            // 【关键修改】强制唤醒 AudioContext
+            // 有些浏览器初始化后是 'suspended' (挂起) 状态，必须手动 resume
+            if (this.chuck.context && this.chuck.context.state === 'suspended') {
+                console.log("Forcing AudioContext resume...");
+                await this.chuck.context.resume();
+            }
             
             this.isReady = true;
             this.ui.btn.innerText = "UPDATE CODE";
             this.ui.btn.disabled = false;
             this.ui.status.innerText = "SYSTEM ONLINE";
             
+            // 3. 运行代码
             this.reloadCode();
+
+            // 4. 【测试声】启动时立刻响一声，证明音频是好的
+            // 运行一段一次性的代码
+            await this.chuck.runCode(`
+                SinOsc s => dac; 
+                0.2 => s.gain; 
+                880 => s.freq; 
+                0.5::second => now;
+            `);
+            
             this.loop();
         } catch (e) {
             console.error(e);
             this.ui.status.innerText = "ERROR: " + e.message;
             this.ui.btn.disabled = false;
-            alert(e.message);
+            alert("Error: " + e.message);
         }
     }
 

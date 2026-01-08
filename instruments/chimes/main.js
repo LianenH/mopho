@@ -1,3 +1,5 @@
+import { Chuck } from './webchuck_host.js';
+
 const DEFAULT_CHUCK_CODE = `
 global float inputVelocity;
 global float paramThreshold;
@@ -58,13 +60,13 @@ class App {
         this.ui.btn.addEventListener('click', () => this.init());
         
         this.ui.p1.addEventListener('input', (e) => {
-            const val = e.target.value / 100.0; // 0.0 - 1.0
+            const val = e.target.value / 100.0;
             this.params.threshold = val;
             if (this.chuck) this.chuck.setFloat('paramThreshold', val);
         });
 
         this.ui.p2.addEventListener('input', (e) => {
-            const val = parseFloat(e.target.value); // 1 - 20
+            const val = parseFloat(e.target.value);
             this.params.density = val;
             if (this.chuck) this.chuck.setFloat('paramDensity', val);
         });
@@ -77,45 +79,36 @@ class App {
     }
 
     async init() {
-        if (typeof window.Chuck === 'undefined') {
-            alert("err:missing the core");
-            this.ui.status.innerText = "SYSTEM: LOAD FAILED";
-            this.ui.btn.disabled = false;
-            return;
-        }
         if (this.isReady) {
             this.reloadCode();
             return;
         }
 
+        this.ui.status.innerText = "SYSTEM: INITIALIZING...";
+        this.ui.btn.disabled = true;
+
         try {
-            this.ui.status.innerText = "SYSTEM: INITIALIZING...";
-            this.ui.btn.disabled = true;
             if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                const state = await DeviceMotionEvent.requestPermission();
-                if (state !== 'granted') {
-                    alert("err:refusepermission");
-                    this.ui.btn.disabled = false;
-                    return;
-                }
+                await DeviceMotionEvent.requestPermission();
             }
+
             window.addEventListener('devicemotion', (e) => this.handleMotion(e));
-            this.chuck = await window.Chuck.init([]);
+            
+            this.chuck = await Chuck.init([]);
             
             this.isReady = true;
+            
             this.ui.btn.innerText = "UPDATE CODE";
             this.ui.btn.disabled = false;
             this.ui.status.innerText = "SYSTEM: ONLINE";
             
             this.reloadCode();
             this.loop();
-            alert("success！");
-
-        } catch (err) {
-            alert("err:\n" + err.message);
+        } catch (e) {
+            console.error(e);
             this.ui.status.innerText = "SYSTEM: ERROR";
             this.ui.btn.disabled = false;
-            console.error(err);
+            alert(e);
         }
     }
 
@@ -127,7 +120,6 @@ class App {
     loop() {
         this.sensorData.smoothedAlpha += (this.sensorData.alpha - this.sensorData.smoothedAlpha) * 0.1;
         
-        // Normalize (Assuming max rotation speed ~300 deg/s)
         let normalizedVelocity = this.sensorData.smoothedAlpha / 300.0;
         if (normalizedVelocity > 1.0) normalizedVelocity = 1.0;
 
@@ -145,7 +137,6 @@ class App {
         const code = this.editor.getValue();
         await this.chuck.runCode(code);
         
-        // Sync params immediately after reload
         this.chuck.setFloat('paramThreshold', this.params.threshold);
         this.chuck.setFloat('paramDensity', this.params.density);
         

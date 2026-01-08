@@ -1,6 +1,6 @@
-import { Chuck } from './webchuck_host.js';
+import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
-const DEFAULT_CHUCK_CODE = `
+const DEFAULT_CODE = `
 global float inputVelocity;
 global float paramThreshold;
 global float paramDensity;
@@ -43,21 +43,36 @@ class App {
             btn: document.getElementById('toggleBtn'),
             status: document.getElementById('status'),
             p1: document.getElementById('param1'),
-            p2: document.getElementById('param2')
+            p2: document.getElementById('param2'),
+            textArea: document.getElementById('codeEditor')
         };
         
-        this.editor = CodeMirror.fromTextArea(document.getElementById('codeEditor'), {
-            mode: 'text/x-c++src',
-            theme: 'monokai',
-            lineNumbers: true
-        });
+        if (typeof CodeMirror !== 'undefined') {
+            this.editor = CodeMirror.fromTextArea(this.ui.textArea, {
+                mode: 'text/x-c++src',
+                theme: 'monokai',
+                lineNumbers: true
+            });
+            this.editor.setValue(DEFAULT_CODE);
+        } else {
+            this.ui.textArea.value = DEFAULT_CODE;
+        }
         
-        this.editor.setValue(DEFAULT_CHUCK_CODE);
         this.bindEvents();
     }
 
+    getCode() {
+        return this.editor ? this.editor.getValue() : this.ui.textArea.value;
+    }
+
     bindEvents() {
-        this.ui.btn.addEventListener('click', () => this.init());
+        this.ui.btn.addEventListener('click', () => {
+            if (!this.isReady) {
+                this.init();
+            } else {
+                this.reloadCode();
+            }
+        });
         
         this.ui.p1.addEventListener('input', (e) => {
             const val = e.target.value / 100.0;
@@ -71,25 +86,22 @@ class App {
             if (this.chuck) this.chuck.setFloat('paramDensity', val);
         });
 
-        this.editor.on('change', () => {
-            if (this.isReady) {
-                this.reloadCode();
-            }
-        });
+        if (this.editor) {
+            this.editor.on('change', () => { if (this.isReady) this.reloadCode(); });
+        } else {
+            this.ui.textArea.addEventListener('input', () => { if (this.isReady) this.reloadCode(); });
+        }
     }
 
     async init() {
-        if (this.isReady) {
-            this.reloadCode();
-            return;
-        }
-
-        this.ui.status.innerText = "SYSTEM: INITIALIZING...";
         this.ui.btn.disabled = true;
+        this.ui.status.innerText = "INITIALIZING...";
 
         try {
-            if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                await DeviceMotionEvent.requestPermission();
+            if (typeof DeviceMotionEvent !== 'undefined' && 
+                typeof DeviceMotionEvent.requestPermission === 'function') {
+                const permission = await DeviceMotionEvent.requestPermission();
+                if (permission !== 'granted') throw new Error("Permission denied");
             }
 
             window.addEventListener('devicemotion', (e) => this.handleMotion(e));
@@ -97,18 +109,17 @@ class App {
             this.chuck = await Chuck.init([]);
             
             this.isReady = true;
-            
             this.ui.btn.innerText = "UPDATE CODE";
             this.ui.btn.disabled = false;
-            this.ui.status.innerText = "SYSTEM: ONLINE";
+            this.ui.status.innerText = "SYSTEM ONLINE";
             
             this.reloadCode();
             this.loop();
         } catch (e) {
             console.error(e);
-            this.ui.status.innerText = "SYSTEM: ERROR";
+            this.ui.status.innerText = "ERROR: " + e.message;
             this.ui.btn.disabled = false;
-            alert(e);
+            alert(e.message);
         }
     }
 
@@ -134,13 +145,13 @@ class App {
         if (!this.chuck) return;
         this.chuck.removeLastShred();
         
-        const code = this.editor.getValue();
+        const code = this.getCode();
         await this.chuck.runCode(code);
         
         this.chuck.setFloat('paramThreshold', this.params.threshold);
         this.chuck.setFloat('paramDensity', this.params.density);
         
-        this.ui.status.innerText = "SYSTEM: CODE UPDATED";
+        this.ui.status.innerText = "CODE UPDATED";
     }
 }
 

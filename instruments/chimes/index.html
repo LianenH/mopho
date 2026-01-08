@@ -4,12 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Air Chimes</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
-    <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
-    <script>
-        var vConsole = new VConsole();
-    </script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.2/lib/codemirror.css">
+    <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.2/theme/monokai.css">
+    
     <style>
         body {
             background-color: #000;
@@ -30,6 +28,8 @@
         input[type=range] { width: 60%; accent-color: #fff; }
         .editor-container { flex-grow: 1; border: 1px solid #333; position: relative; }
         .CodeMirror { height: 100%; font-size: 14px; }
+        #codeEditor { width: 100%; height: 100%; background: #111; color: #fff; border: none; resize: none; }
+        
         button {
             background: #fff;
             color: #000;
@@ -47,7 +47,7 @@
     </style>
 </head>
 <body>
-    <h1>CHIMES</h1>
+    <h1>AIR CHIMES // MARK TREE</h1>
     
     <div class="controls">
         <div class="slider-group">
@@ -64,11 +64,12 @@
         <textarea id="codeEditor"></textarea>
     </div>
 
-    <button id="toggleBtn">INITIALIZE</button>
+    <button id="toggleBtn">INITIALIZE SYSTEM</button>
     <div id="status">SYSTEM: STANDBY</div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/clike/clike.min.js"></script>
+    <script src="https://unpkg.com/codemirror@5.65.2/lib/codemirror.js"></script>
+    <script src="https://unpkg.com/codemirror@5.65.2/mode/clike/clike.js"></script>
+    
     <script type="module" src="./main.js"></script>
 </body>
 </html>

@@ -77,29 +77,46 @@ class App {
     }
 
     async init() {
+        if (typeof window.Chuck === 'undefined') {
+            alert("err:missing the core");
+            this.ui.status.innerText = "SYSTEM: LOAD FAILED";
+            this.ui.btn.disabled = false;
+            return;
+        }
         if (this.isReady) {
             this.reloadCode();
             return;
         }
 
-        this.ui.status.innerText = "SYSTEM: INITIALIZING...";
-        this.ui.btn.disabled = true;
+        try {
+            this.ui.status.innerText = "SYSTEM: INITIALIZING...";
+            this.ui.btn.disabled = true;
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                const state = await DeviceMotionEvent.requestPermission();
+                if (state !== 'granted') {
+                    alert("err:refusepermission");
+                    this.ui.btn.disabled = false;
+                    return;
+                }
+            }
+            window.addEventListener('devicemotion', (e) => this.handleMotion(e));
+            this.chuck = await window.Chuck.init([]);
+            
+            this.isReady = true;
+            this.ui.btn.innerText = "UPDATE CODE";
+            this.ui.btn.disabled = false;
+            this.ui.status.innerText = "SYSTEM: ONLINE";
+            
+            this.reloadCode();
+            this.loop();
+            alert("success！");
 
-        if (typeof DeviceMotionEvent.requestPermission === 'function') {
-            await DeviceMotionEvent.requestPermission();
+        } catch (err) {
+            alert("err:\n" + err.message);
+            this.ui.status.innerText = "SYSTEM: ERROR";
+            this.ui.btn.disabled = false;
+            console.error(err);
         }
-
-        window.addEventListener('devicemotion', (e) => this.handleMotion(e));
-        
-        this.chuck = await window.Chuck.init([]);
-        this.isReady = true;
-        
-        this.ui.btn.innerText = "UPDATE CODE";
-        this.ui.btn.disabled = false;
-        this.ui.status.innerText = "SYSTEM: ONLINE";
-        
-        this.reloadCode();
-        this.loop();
     }
 
     handleMotion(e) {

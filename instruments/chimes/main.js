@@ -2,39 +2,37 @@ import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
 function getPhysicalChime(freq, pan, velocity) {
     return `
-    ModalBar m => Gain g => NRev rev => Pan2 p => dac;
+    ModalBar m => Pan2 p => dac;
 
     1 => m.preset;
+    0.4 => m.stickHardness; 
     
-    0.6 => m.stickHardness;
-    Math.random2f(0.2, 0.8) => m.strikePosition;
-    
-    4.0 => g.gain;
+    0.15 => m.gain;
     
     ${freq.toFixed(2)} => m.freq;
     ${pan.toFixed(2)} => p.pan;
     
-    0.35 => rev.mix;
-    
     ${velocity.toFixed(2)} => m.noteOn;
     
-    5::second => now;
+    2500::ms => now;
     `;
 }
 
 const DISPLAY_TEMPLATE = `
-// Final Polish
-ModalBar m => Gain g => NRev rev => Pan2 p => dac;
+// Optimized ModalBar (No Reverb)
+ModalBar m => Pan2 p => dac;
 
 1 => m.preset; 
-0.6 => m.stickHardness; // Softer, no clicking
-4.0 => g.gain; // Reduced to prevent clipping
+0.4 => m.stickHardness;
+
+// Low gain for safety
+0.15 => m.gain; 
 
 FREQ => m.freq;
 VELOCITY => m.noteOn;
-0.35 => rev.mix; // Lush reverb
 
-5::second => now;
+// Shorter decay to save CPU
+2500::ms => now;
 `;
 
 const btn = document.getElementById('toggleBtn');
@@ -50,11 +48,12 @@ class App {
         this.chuck = null;
         this.isReady = false;
         
-        this.virtualPos = 25.0;
+        this.virtualPos = 20.0;
         this.velocity = 0.0;
         this.totalBars = 50; 
         
         this.params = { friction: 0.94, sensitivity: 1.2 };
+        this.lastTriggerTime = 0;
         
         if (typeof CodeMirror !== 'undefined' && textArea) {
             this.editor = CodeMirror.fromTextArea(textArea, {
@@ -154,27 +153,22 @@ class App {
         
         const currentIdx = Math.floor(this.virtualPos);
         const prevIdx = Math.floor(this.virtualPos - this.velocity);
+        const now = Date.now();
         
         if (currentIdx !== prevIdx) {
             if (Math.abs(this.velocity) > 0.05) {
-                this.triggerBar(currentIdx, Math.abs(this.velocity));
-                
-                if (Math.random() > 0.6) {
-                    const offset = Math.random() > 0.5 ? 1 : -1;
-                    const neighbor = currentIdx + offset;
-                    if (neighbor >=0 && neighbor < this.totalBars) {
-                        setTimeout(() => {
-                            this.triggerBar(neighbor, Math.abs(this.velocity) * 0.4);
-                        }, Math.random() * 40);
-                    }
+                // Throttle to prevent CPU explosion (Max 20 notes/sec)
+                if (now - this.lastTriggerTime > 50) {
+                    this.triggerBar(currentIdx, Math.abs(this.velocity));
+                    this.lastTriggerTime = now;
+                    
+                    cursorDiv.style.opacity = "1";
+                    cursorDiv.style.boxShadow = "0 0 20px #0ff";
+                    setTimeout(() => {
+                        cursorDiv.style.opacity = "0.5";
+                        cursorDiv.style.boxShadow = "none";
+                    }, 50);
                 }
-                
-                cursorDiv.style.opacity = "1";
-                cursorDiv.style.boxShadow = "0 0 20px #ffd700";
-                setTimeout(() => {
-                    cursorDiv.style.opacity = "0.5";
-                    cursorDiv.style.boxShadow = "none";
-                }, 50);
             }
         }
 
@@ -189,14 +183,12 @@ class App {
         if (!this.chuck) return;
         
         const t = index / this.totalBars;
-        // Wide Range: 3500Hz -> 200Hz
-        const freq = 3500 * Math.pow(0.06, t);
-        
+        const freq = 3000 * Math.pow(0.1, t); // 3000Hz -> 300Hz
         const pan = (t * 2.0) - 1.0;
         
         let force = vel;
         if (force > 0.8) force = 0.8;
-        if (force < 0.2) force = 0.2; 
+        if (force < 0.3) force = 0.3; 
         
         const code = getPhysicalChime(freq, pan, force);
         this.chuck.runCode(code);

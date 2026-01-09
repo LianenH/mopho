@@ -2,37 +2,42 @@ import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
 function getPhysicalChime(freq, pan, velocity) {
     return `
-    ModalBar m => Pan2 p => dac;
+    // Chain: ModalBar -> HighPassFilter -> Pan -> Out
+    ModalBar m => HPF cut => Pan2 p => dac;
 
-    1 => m.preset;
-    0.4 => m.stickHardness; 
+    1 => m.preset; 
     
-    0.15 => m.gain;
+    // Max hardness for sharp attack
+    0.98 => m.stickHardness;
+    
+    Math.random2f(0.0, 0.15) => m.strikePosition;
+
+    600.0 => cut.freq;
+    1.0 => cut.Q;
+    
+    0.3 => m.gain; 
     
     ${freq.toFixed(2)} => m.freq;
     ${pan.toFixed(2)} => p.pan;
     
     ${velocity.toFixed(2)} => m.noteOn;
     
-    2500::ms => now;
+    3::second => now;
     `;
 }
 
 const DISPLAY_TEMPLATE = `
-// Optimized ModalBar (No Reverb)
-ModalBar m => Pan2 p => dac;
+ModalBar m => HPF cut => Pan2 p => dac;
 
-1 => m.preset; 
-0.4 => m.stickHardness;
+1 => m.preset;
+0.98 => m.stickHardness;
 
-// Low gain for safety
-0.15 => m.gain; 
+Math.random2f(0.0, 0.15) => m.strikePosition;
+
+600.0 => cut.freq;
 
 FREQ => m.freq;
 VELOCITY => m.noteOn;
-
-// Shorter decay to save CPU
-2500::ms => now;
 `;
 
 const btn = document.getElementById('toggleBtn');
@@ -50,7 +55,7 @@ class App {
         
         this.virtualPos = 20.0;
         this.velocity = 0.0;
-        this.totalBars = 50; 
+        this.totalBars = 60; // Increased bars for finer gradient
         
         this.params = { friction: 0.94, sensitivity: 1.2 };
         this.lastTriggerTime = 0;
@@ -157,8 +162,7 @@ class App {
         
         if (currentIdx !== prevIdx) {
             if (Math.abs(this.velocity) > 0.05) {
-                // Throttle to prevent CPU explosion (Max 20 notes/sec)
-                if (now - this.lastTriggerTime > 50) {
+                if (now - this.lastTriggerTime > 40) {
                     this.triggerBar(currentIdx, Math.abs(this.velocity));
                     this.lastTriggerTime = now;
                     
@@ -183,12 +187,12 @@ class App {
         if (!this.chuck) return;
         
         const t = index / this.totalBars;
-        const freq = 3000 * Math.pow(0.1, t); // 3000Hz -> 300Hz
+        const freq = 4000 * Math.pow(0.15, t); 
         const pan = (t * 2.0) - 1.0;
         
         let force = vel;
-        if (force > 0.8) force = 0.8;
-        if (force < 0.3) force = 0.3; 
+        if (force > 0.9) force = 0.9;
+        if (force < 0.4) force = 0.4; 
         
         const code = getPhysicalChime(freq, pan, force);
         this.chuck.runCode(code);

@@ -1,55 +1,50 @@
 import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
-function getChimeSound(freq, pan) {
+function getPhysicalChime(freq, pan, velocity) {
     return `
-    // Soft FM Chime
-    SinOsc car => LPF filter => ADSR env => NRev rev => Pan2 p => dac;
-    SinOsc mod => car; 
+    ModalBar m => Gain g => NRev rev => Pan2 p => dac;
 
-    // Soften the tone
-    ${freq.toFixed(2)} => float f;
-    ${pan.toFixed(2)} => float panVal;
-
-    f => car.freq;
+    // Preset 1: Vibraphone (Closest to metal bars)
+    1 => m.preset;
     
-    // VERY SAFE GAIN (Prevent clipping)
-    0.02 => car.gain;
-
-    // Harmonic Ratio (2.0 = Octave) - Much smoother
-    f * 2.0 => mod.freq;
-    // Modulation Index proportional to freq (Brightness)
-    200 => mod.gain;
-    2 => car.sync;
-
-    // Cut off piercing highs
-    3000 => filter.freq;
-
-    panVal => p.pan;
-    0.1 => rev.mix;
-
-    // Longer release for ambience
-    (2::ms, 50::ms, 0.1, 1000::ms) => env.set;
-
-    1 => env.keyOn;
-    10::ms => now;
-    1 => env.keyOff;
-    1000::ms => now;
+    // Max hardness = Metal striker hitting metal bar
+    0.95 => m.stickHardness;
+    
+    // Vary strike position slightly for realism
+    Math.random2f(0.4, 0.6) => m.strikePosition;
+    
+    // High gain to compensate for phone speakers
+    30.0 => g.gain;
+    
+    // Frequency
+    ${freq.toFixed(2)} => m.freq;
+    
+    // Panning
+    ${pan.toFixed(2)} => p.pan;
+    
+    // Reverb mix
+    0.15 => rev.mix;
+    
+    // Velocity (Strike force)
+    ${velocity.toFixed(2)} => m.noteOn;
+    
+    // Let it ring
+    4::second => now;
     `;
 }
 
 const DISPLAY_TEMPLATE = `
-// Soft FM Chime
-SinOsc car => LPF filter => ADSR env => NRev rev => Pan2 p => dac;
-SinOsc mod => car; 
+// Physical Modeling (STK ModalBar)
+ModalBar m => Gain g => NRev rev => Pan2 p => dac;
 
-FREQ => car.freq;
-FREQ * 2.0 => mod.freq; // Smooth harmonic
+// 1 = Vibraphone (Metal Bar)
+1 => m.preset; 
+0.95 => m.stickHardness; // Metal sound
 
-0.02 => car.gain; // Safe volume
-3000 => filter.freq; // Cut sharpness
+FREQ => m.freq;
+VELOCITY => m.noteOn;
 
-PAN => p.pan;
-(2::ms, 50::ms, 0.1, 1000::ms) => env.set;
+4::second => now;
 `;
 
 const btn = document.getElementById('toggleBtn');
@@ -67,9 +62,9 @@ class App {
         
         this.virtualPos = 20.0;
         this.velocity = 0.0;
-        this.totalBars = 40;
+        this.totalBars = 50; // More bars = smoother slide
         
-        this.params = { friction: 0.95, sensitivity: 1.0 };
+        this.params = { friction: 0.94, sensitivity: 1.2 };
         
         if (typeof CodeMirror !== 'undefined' && textArea) {
             this.editor = CodeMirror.fromTextArea(textArea, {
@@ -129,8 +124,9 @@ class App {
             btn.disabled = false;
             statusDiv.innerText = "ONLINE";
             
+            // Warm up
             await this.chuck.runCode(`
-                SinOsc s => dac; 0.05 => s.gain; 
+                SinOsc s => dac; 0.1 => s.gain; 
                 880 => s.freq; 0.1::second => now; 
                 0.0 => s.gain;
             `);
@@ -146,20 +142,20 @@ class App {
 
     handleMotion(e) {
         const accX = e.acceleration ? e.acceleration.x : 0;
-        if (Math.abs(accX) < 0.2) return;
+        if (Math.abs(accX) < 0.15) return;
         this.velocity -= accX * (0.05 * this.params.sensitivity);
     }
 
     loop() {
-        // Speed Limit
-        const MAX_SPEED = 2.0;
+        // Hard Speed Limit
+        const MAX_SPEED = 2.5;
         if (this.velocity > MAX_SPEED) this.velocity = MAX_SPEED;
         if (this.velocity < -MAX_SPEED) this.velocity = -MAX_SPEED;
 
         this.virtualPos += this.velocity;
         this.velocity *= this.params.friction;
         
-        // Boundaries
+        // Bounce
         if (this.virtualPos < 0) {
             this.virtualPos = 0;
             this.velocity *= -0.5;
@@ -172,19 +168,29 @@ class App {
         const currentIdx = Math.floor(this.virtualPos);
         const prevIdx = Math.floor(this.virtualPos - this.velocity);
         
-        // --- ANTI-BURST LOGIC ---
-        // Only trigger if we actually crossed a bar AND moving fast enough
-        // This prevents "jittering" on the edge of a bar causing machine-gun sounds
         if (currentIdx !== prevIdx) {
             if (Math.abs(this.velocity) > 0.05) {
-                this.triggerBar(currentIdx);
+                // Main Trigger
+                this.triggerBar(currentIdx, Math.abs(this.velocity));
                 
-                // Visual Feedback
+                // Chaos Trigger (Neighbor collision)
+                // Real chimes hit each other
+                if (Math.random() > 0.5) {
+                    const offset = Math.random() > 0.5 ? 1 : -1;
+                    const neighbor = currentIdx + offset;
+                    if (neighbor >=0 && neighbor < this.totalBars) {
+                        // Delay neighbor hit slightly
+                        setTimeout(() => {
+                            this.triggerBar(neighbor, Math.abs(this.velocity) * 0.5);
+                        }, Math.random() * 30);
+                    }
+                }
+                
                 cursorDiv.style.opacity = "1";
-                cursorDiv.style.boxShadow = "0 0 20px #fff";
+                cursorDiv.style.boxShadow = "0 0 20px #ffd700";
                 setTimeout(() => {
                     cursorDiv.style.opacity = "0.5";
-                    cursorDiv.style.boxShadow = "0 0 15px #0f0";
+                    cursorDiv.style.boxShadow = "none";
                 }, 50);
             }
         }
@@ -196,15 +202,26 @@ class App {
         requestAnimationFrame(() => this.loop());
     }
     
-    triggerBar(index) {
+    triggerBar(index, vel) {
         if (!this.chuck) return;
         
-        // Freq: 1500Hz -> 600Hz (Softer range)
-        const t = index / this.totalBars;
-        const freq = 1500 * Math.pow(0.4, t);
-        const pan = (t * 2.0) - 1.0;
+        // Linear Frequency Mapping (Physical tube length)
+        // High (Short) -> Low (Long)
+        // Range: 2500Hz -> 500Hz
         
-        const code = getChimeSound(freq, pan);
+        // Detune slightly for realism (bars aren't perfect)
+        const detune = (Math.random() * 20) - 10;
+        const baseFreq = 2500 - (index * 40);
+        const freq = baseFreq + detune;
+        
+        const pan = (index / this.totalBars) * 2.0 - 1.0;
+        
+        // Cap velocity
+        let force = vel;
+        if (force > 1.0) force = 1.0;
+        if (force < 0.3) force = 0.3; // Minimum strike
+        
+        const code = getPhysicalChime(freq, pan, force);
         this.chuck.runCode(code);
     }
 }

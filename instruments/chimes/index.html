@@ -98,28 +98,27 @@
             border: 1px solid #444;
         }
         #visual-cursor {
-            width: 10px;
+            width: 8px;
             height: 100%;
-            background: #0f0;
+            background: #ffd700;
             position: absolute;
             left: 50%;
             transform: translateX(-50%);
-            box-shadow: 0 0 15px #0f0;
-            opacity: 0.5;
+            box-shadow: 0 0 15px #ffd700;
         }
     </style>
 </head>
 <body>
-    <h1>SMOOTH CHIMES</h1>
+    <h1>PHYSICAL MARK TREE</h1>
     
     <div class="controls">
         <div class="slider-group">
-            <label>FRICTION</label>
-            <input type="range" id="param1" min="1" max="100" value="15">
+            <label>DRAG / FRICTION</label>
+            <input type="range" id="param1" min="1" max="100" value="20">
         </div>
         <div class="slider-group">
             <label>SENSITIVITY</label>
-            <input type="range" id="param2" min="1" max="100" value="50">
+            <input type="range" id="param2" min="1" max="100" value="60">
         </div>
     </div>
 
@@ -136,7 +135,7 @@
         <div id="status">OFFLINE</div>
     </div>
 
-    <button id="toggleBtn">ACTIVATE SYSTEM</button>
+    <button id="toggleBtn">ACTIVATE</button>
 
     <script src="https://unpkg.com/codemirror@5.65.2/lib/codemirror.js"></script>
     <script src="https://unpkg.com/codemirror@5.65.2/mode/clike/clike.js"></script>

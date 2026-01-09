@@ -4,47 +4,37 @@ function getPhysicalChime(freq, pan, velocity) {
     return `
     ModalBar m => Gain g => NRev rev => Pan2 p => dac;
 
-    // Preset 1: Vibraphone (Closest to metal bars)
     1 => m.preset;
     
-    // Max hardness = Metal striker hitting metal bar
-    0.95 => m.stickHardness;
+    0.6 => m.stickHardness;
+    Math.random2f(0.2, 0.8) => m.strikePosition;
     
-    // Vary strike position slightly for realism
-    Math.random2f(0.4, 0.6) => m.strikePosition;
+    4.0 => g.gain;
     
-    // High gain to compensate for phone speakers
-    30.0 => g.gain;
-    
-    // Frequency
     ${freq.toFixed(2)} => m.freq;
-    
-    // Panning
     ${pan.toFixed(2)} => p.pan;
     
-    // Reverb mix
-    0.15 => rev.mix;
+    0.35 => rev.mix;
     
-    // Velocity (Strike force)
     ${velocity.toFixed(2)} => m.noteOn;
     
-    // Let it ring
-    4::second => now;
+    5::second => now;
     `;
 }
 
 const DISPLAY_TEMPLATE = `
-// Physical Modeling (STK ModalBar)
+// Final Polish
 ModalBar m => Gain g => NRev rev => Pan2 p => dac;
 
-// 1 = Vibraphone (Metal Bar)
 1 => m.preset; 
-0.95 => m.stickHardness; // Metal sound
+0.6 => m.stickHardness; // Softer, no clicking
+4.0 => g.gain; // Reduced to prevent clipping
 
 FREQ => m.freq;
 VELOCITY => m.noteOn;
+0.35 => rev.mix; // Lush reverb
 
-4::second => now;
+5::second => now;
 `;
 
 const btn = document.getElementById('toggleBtn');
@@ -60,9 +50,9 @@ class App {
         this.chuck = null;
         this.isReady = false;
         
-        this.virtualPos = 20.0;
+        this.virtualPos = 25.0;
         this.velocity = 0.0;
-        this.totalBars = 50; // More bars = smoother slide
+        this.totalBars = 50; 
         
         this.params = { friction: 0.94, sensitivity: 1.2 };
         
@@ -124,7 +114,6 @@ class App {
             btn.disabled = false;
             statusDiv.innerText = "ONLINE";
             
-            // Warm up
             await this.chuck.runCode(`
                 SinOsc s => dac; 0.1 => s.gain; 
                 880 => s.freq; 0.1::second => now; 
@@ -147,15 +136,13 @@ class App {
     }
 
     loop() {
-        // Hard Speed Limit
-        const MAX_SPEED = 2.5;
+        const MAX_SPEED = 2.0;
         if (this.velocity > MAX_SPEED) this.velocity = MAX_SPEED;
         if (this.velocity < -MAX_SPEED) this.velocity = -MAX_SPEED;
 
         this.virtualPos += this.velocity;
         this.velocity *= this.params.friction;
         
-        // Bounce
         if (this.virtualPos < 0) {
             this.virtualPos = 0;
             this.velocity *= -0.5;
@@ -170,19 +157,15 @@ class App {
         
         if (currentIdx !== prevIdx) {
             if (Math.abs(this.velocity) > 0.05) {
-                // Main Trigger
                 this.triggerBar(currentIdx, Math.abs(this.velocity));
                 
-                // Chaos Trigger (Neighbor collision)
-                // Real chimes hit each other
-                if (Math.random() > 0.5) {
+                if (Math.random() > 0.6) {
                     const offset = Math.random() > 0.5 ? 1 : -1;
                     const neighbor = currentIdx + offset;
                     if (neighbor >=0 && neighbor < this.totalBars) {
-                        // Delay neighbor hit slightly
                         setTimeout(() => {
-                            this.triggerBar(neighbor, Math.abs(this.velocity) * 0.5);
-                        }, Math.random() * 30);
+                            this.triggerBar(neighbor, Math.abs(this.velocity) * 0.4);
+                        }, Math.random() * 40);
                     }
                 }
                 
@@ -205,21 +188,15 @@ class App {
     triggerBar(index, vel) {
         if (!this.chuck) return;
         
-        // Linear Frequency Mapping (Physical tube length)
-        // High (Short) -> Low (Long)
-        // Range: 2500Hz -> 500Hz
+        const t = index / this.totalBars;
+        // Wide Range: 3500Hz -> 200Hz
+        const freq = 3500 * Math.pow(0.06, t);
         
-        // Detune slightly for realism (bars aren't perfect)
-        const detune = (Math.random() * 20) - 10;
-        const baseFreq = 2500 - (index * 40);
-        const freq = baseFreq + detune;
+        const pan = (t * 2.0) - 1.0;
         
-        const pan = (index / this.totalBars) * 2.0 - 1.0;
-        
-        // Cap velocity
         let force = vel;
-        if (force > 1.0) force = 1.0;
-        if (force < 0.3) force = 0.3; // Minimum strike
+        if (force > 0.8) force = 0.8;
+        if (force < 0.2) force = 0.2; 
         
         const code = getPhysicalChime(freq, pan, force);
         this.chuck.runCode(code);

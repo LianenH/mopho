@@ -1,53 +1,47 @@
 import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
-function getChimeSound(freq, pan, reverbAmount) {
+function getChimeSound(freq, pan) {
     return `
     SinOsc car => ADSR env => NRev rev => Pan2 p => dac;
-    SinOsc mod => car; // FM Synthesis
+    SinOsc mod => car; 
 
-    // Parameters
     ${freq.toFixed(2)} => float f;
     ${pan.toFixed(2)} => float panVal;
-    ${reverbAmount.toFixed(2)} => float revMix;
 
-    // Carrier
     f => car.freq;
-    0.3 => car.gain;
+    
+    // Low Gain to prevent clipping
+    0.05 => car.gain;
 
-    // Modulator (The metal texture)
-    // Ratio 3.5 creates bell-like inharmonic partials
     f * 3.5 => mod.freq;
     200 => mod.gain;
-    2 => car.sync; // FM Sync
+    2 => car.sync;
 
-    // Panning (Low notes left, High notes right)
     panVal => p.pan;
+    0.1 => rev.mix;
 
-    // Reverb
-    revMix => rev.mix;
-
-    // Envelope (Sharp attack, long release)
-    (1::ms, 20::ms, 0.4, 3000::ms) => env.set;
+    (1::ms, 30::ms, 0.2, 2000::ms) => env.set;
 
     1 => env.keyOn;
-    10::ms => now;
+    15::ms => now;
     1 => env.keyOff;
-    3000::ms => now;
+    2000::ms => now;
     `;
 }
 
 const DISPLAY_TEMPLATE = `
-// FM Metal Chime (Polyphonic)
+// FM Chime (Anti-Clipping)
 SinOsc car => ADSR env => NRev rev => Pan2 p => dac;
 SinOsc mod => car; 
 
 FREQ => car.freq;
-FREQ * 3.5 => mod.freq; // Inharmonic Ratio
+FREQ * 3.5 => mod.freq;
+
+// Gain lowered significantly to allow polyphony
+0.05 => car.gain;
 
 PAN => p.pan;
-REVERB => rev.mix;
-
-(1::ms, 20::ms, 0.4, 3000::ms) => env.set;
+(1::ms, 30::ms, 0.2, 2000::ms) => env.set;
 `;
 
 const btn = document.getElementById('toggleBtn');
@@ -63,12 +57,11 @@ class App {
         this.chuck = null;
         this.isReady = false;
         
-        // Physics State
-        this.virtualPos = 20.0; // 0 to 40
+        this.virtualPos = 20.0;
         this.velocity = 0.0;
         this.totalBars = 40;
         
-        this.params = { friction: 0.9, reverb: 0.5 };
+        this.params = { friction: 0.95, sensitivity: 1.0 };
         
         if (typeof CodeMirror !== 'undefined' && textArea) {
             this.editor = CodeMirror.fromTextArea(textArea, {
@@ -88,15 +81,15 @@ class App {
         });
         
         p1.addEventListener('input', (e) => {
-            // Friction/Drag: Lower value = more slippery
-            // Map 1-100 to 0.8 - 0.99
-            const val = 1.0 - (e.target.value / 1000.0);
+            // Friction: 0.80 to 0.99
+            const val = 1.0 - (e.target.value / 2000.0);
             this.params.friction = val;
         });
 
         p2.addEventListener('input', (e) => {
-            const val = e.target.value / 100.0;
-            this.params.reverb = val;
+            // Sensitivity
+            const val = e.target.value / 50.0;
+            this.params.sensitivity = val;
         });
     }
 
@@ -130,9 +123,8 @@ class App {
             btn.disabled = false;
             statusDiv.innerText = "ONLINE";
             
-            // Warm up
             await this.chuck.runCode(`
-                SinOsc s => dac; 0.1 => s.gain; 
+                SinOsc s => dac; 0.05 => s.gain; 
                 880 => s.freq; 0.1::second => now; 
                 0.0 => s.gain;
             `);
@@ -147,53 +139,50 @@ class App {
     }
 
     handleMotion(e) {
-        const r = e.rotationRate || {};
-        // Use alpha (Z-axis rotation) for horizontal swiping
-        const inputForce = r.alpha || 0;
+        // Linear Acceleration X (Left/Right movement)
+        // This is physically moving the phone, not tilting
+        const accX = e.acceleration ? e.acceleration.x : 0;
         
-        // Apply physics impulse
-        // Sensitivity scaling
-        this.velocity += inputForce * 0.005; 
+        // Deadzone to stop drift
+        if (Math.abs(accX) < 0.2) return;
+        
+        // Apply Force (F = ma)
+        // Invert X because usually moving right moves content left
+        this.velocity -= accX * (0.05 * this.params.sensitivity);
     }
 
     loop() {
-        // 1. Apply Physics (Inertia & Friction)
+        // Speed Limit (Prevent "Teleporting" through bars)
+        const MAX_SPEED = 1.5;
+        if (this.velocity > MAX_SPEED) this.velocity = MAX_SPEED;
+        if (this.velocity < -MAX_SPEED) this.velocity = -MAX_SPEED;
+
         this.virtualPos += this.velocity;
-        this.velocity *= this.params.friction; // Drag
+        this.velocity *= this.params.friction;
         
-        // 2. Boundary Bounce (Keep cursor inside 0-40)
+        // Boundaries (Bounce)
         if (this.virtualPos < 0) {
             this.virtualPos = 0;
-            this.velocity *= -0.5; // Bounce
+            this.velocity *= -0.5;
         }
         if (this.virtualPos > this.totalBars) {
             this.virtualPos = this.totalBars;
-            this.velocity *= -0.5; // Bounce
+            this.velocity *= -0.5;
         }
         
-        // 3. Collision Detection
-        // Did we cross an integer boundary?
+        // Trigger Logic
         const currentIdx = Math.floor(this.virtualPos);
         const prevIdx = Math.floor(this.virtualPos - this.velocity);
         
         if (currentIdx !== prevIdx) {
-            // We crossed a bar! Trigger sound.
-            // Determine range of bars crossed (for very fast swipes)
-            const start = Math.min(prevIdx, currentIdx);
-            const end = Math.max(prevIdx, currentIdx);
-            
-            // Limit chords to prevent CPU overload on crazy swipes
-            const count = end - start;
-            if (count < 5) {
-                // Trigger the specific bar(s)
-                this.triggerBar(currentIdx);
-            }
+            // Only trigger if we moved enough (debounce)
+            this.triggerBar(currentIdx);
         }
 
-        // 4. Visual Update
+        // UI Update
         const pct = (this.virtualPos / this.totalBars) * 100;
         cursorDiv.style.left = pct + "%";
-        debugDiv.innerText = "BAR: " + currentIdx;
+        debugDiv.innerText = "VEL: " + this.velocity.toFixed(2);
 
         requestAnimationFrame(() => this.loop());
     }
@@ -201,26 +190,13 @@ class App {
     triggerBar(index) {
         if (!this.chuck) return;
         
-        // Map index (0-40) to Frequency (Exponential Curve)
-        // High -> Low or Low -> High
-        // Real chimes usually go High (short) to Low (long)
-        
-        // Start: 2000Hz, End: 400Hz
-        // Exponential mapping looks more natural
+        // Exponential Pitch Mapping
         const t = index / this.totalBars;
-        const freq = 2000 * Math.pow(0.2, t);
-        
-        // Stereo Panning
-        // 0 -> -1.0 (Left), 40 -> 1.0 (Right)
+        const freq = 2000 * Math.pow(0.25, t);
         const pan = (t * 2.0) - 1.0;
         
-        // Trigger
-        const code = getChimeSound(freq, pan, this.params.reverb);
+        const code = getChimeSound(freq, pan);
         this.chuck.runCode(code);
-        
-        // Visual Flash
-        document.body.style.backgroundColor = "#111";
-        setTimeout(() => document.body.style.backgroundColor = "#050505", 20);
     }
 }
 

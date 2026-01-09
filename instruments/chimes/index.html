@@ -89,34 +89,36 @@
             font-family: sans-serif;
         }
         #visual-bar {
-            height: 4px;
-            background: #333;
+            height: 6px;
+            background: #222;
             margin-top: 15px;
             position: relative;
-            border-radius: 2px;
+            border-radius: 3px;
             overflow: hidden;
+            border: 1px solid #444;
         }
         #visual-cursor {
-            width: 4px;
+            width: 10px;
             height: 100%;
-            background: #fff;
+            background: #0f0;
             position: absolute;
             left: 50%;
-            box-shadow: 0 0 10px #fff;
+            transform: translateX(-50%);
+            box-shadow: 0 0 15px #0f0;
         }
     </style>
 </head>
 <body>
-    <h1>REAL CHIMES</h1>
+    <h1>LINEAR CHIMES</h1>
     
     <div class="controls">
         <div class="slider-group">
             <label>FRICTION</label>
-            <input type="range" id="param1" min="1" max="100" value="10">
+            <input type="range" id="param1" min="1" max="100" value="15">
         </div>
         <div class="slider-group">
-            <label>REVERB</label>
-            <input type="range" id="param2" min="0" max="100" value="50">
+            <label>SENSITIVITY</label>
+            <input type="range" id="param2" min="1" max="100" value="50">
         </div>
     </div>
 
@@ -129,11 +131,11 @@
     </div>
 
     <div id="status-row">
-        <div id="debug-info">READY</div>
+        <div id="debug-info">WAITING</div>
         <div id="status">OFFLINE</div>
     </div>
 
-    <button id="toggleBtn">ACTIVATE</button>
+    <button id="toggleBtn">ACTIVATE SYSTEM</button>
 
     <script src="https://unpkg.com/codemirror@5.65.2/lib/codemirror.js"></script>
     <script src="https://unpkg.com/codemirror@5.65.2/mode/clike/clike.js"></script>

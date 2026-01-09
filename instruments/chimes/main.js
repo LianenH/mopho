@@ -2,47 +2,49 @@ import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
 function getMetalSound(freq) {
     return `
-    SinOsc car => ADSR env => dac;
-    SinOsc mod => blackhole;
+    SinOsc fund => ADSR env => NRev rev => dac;
+    SinOsc over => env;
+    
+    env => Delay d => d => rev;
 
     ${freq.toFixed(2)} => float f;
     
-    f => car.freq;
-    f * 1.414 => mod.freq;
+    f => fund.freq;
+    f * 2.76 => over.freq;
     
-    mod => car;
-    2 => car.sync;
+    0.4 => fund.gain;
+    0.1 => over.gain;
     
-    500 => mod.gain;
+    0.2 => rev.mix;
     
-    0.3 => car.gain;
+    120::ms => d.max => d.delay;
+    0.6 => d.gain;
     
-    (1::ms, 150::ms, 0.0, 0::ms) => env.set;
+    (2::ms, 200::ms, 0.0, 0::ms) => env.set;
     
     1 => env.keyOn;
-    150::ms => now;
+    200::ms => now;
     `;
 }
 
 const DISPLAY_TEMPLATE = `
-// FM Metal Chime Template
-SinOsc car => ADSR env => dac;
-SinOsc mod => blackhole;
+// Metal Chime Generator
+SinOsc fund => ADSR env => NRev rev => dac;
+SinOsc over => env; // Overtone
+env => Delay d => d => rev; // Sparkle
 
-// Frequency injected by JS
-FREQ => car.freq;
+FREQ => fund.freq;
+FREQ * 2.76 => over.freq; // 2.76 is physical bar ratio
 
-// Metal ratio (root 2)
-FREQ * 1.414 => mod.freq;
-
-// Phase Modulation
-mod => car;
-2 => car.sync;
+0.2 => rev.mix;
+120::ms => d.delay;
+0.6 => d.gain;
 `;
 
 const btn = document.getElementById('toggleBtn');
 const statusDiv = document.getElementById('status');
 const debugDiv = document.getElementById('sensor-debug');
+const dirDiv = document.getElementById('direction-debug');
 const p1 = document.getElementById('param1');
 const p2 = document.getElementById('param2');
 const textArea = document.getElementById('codeEditor');
@@ -56,7 +58,7 @@ class App {
         this.params = { threshold: 0.05, density: 10 };
         this.lastTriggerTime = 0;
         
-        this.chimeIndex = 0;
+        this.chimeIndex = 20;
         this.totalChimes = 40;
         
         if (typeof CodeMirror !== 'undefined' && textArea) {
@@ -116,8 +118,7 @@ class App {
             btn.disabled = false;
             statusDiv.innerText = "ONLINE";
             
-            const testCode = getMetalSound(1000);
-            await this.chuck.runCode(testCode);
+            await this.chuck.runCode(getMetalSound(1000));
             
             this.loop();
         } catch (e) {
@@ -130,16 +131,23 @@ class App {
 
     handleMotion(e) {
         const r = e.rotationRate || {};
-        const rawAlpha = Math.abs(r.alpha || 0);
-        this.sensorData.alpha = rawAlpha;
-        debugDiv.innerText = "VAL: " + rawAlpha.toFixed(0);
+        const alpha = r.alpha || 0;
+        this.sensorData.alpha = alpha;
+        
+        debugDiv.innerText = "SPD: " + Math.abs(alpha).toFixed(0);
     }
 
     loop() {
         this.sensorData.smoothedAlpha += (this.sensorData.alpha - this.sensorData.smoothedAlpha) * 0.1;
         
-        let normalizedVelocity = this.sensorData.smoothedAlpha / 150.0;
+        const velocity = Math.abs(this.sensorData.smoothedAlpha);
+        const direction = Math.sign(this.sensorData.smoothedAlpha);
+        
+        let normalizedVelocity = velocity / 150.0;
         if (normalizedVelocity > 1.0) normalizedVelocity = 1.0;
+
+        if (direction > 0) dirDiv.innerText = "DIR: >>>";
+        else dirDiv.innerText = "DIR: <<<";
 
         if (normalizedVelocity > this.params.threshold) {
             btn.style.backgroundColor = "#333";
@@ -153,10 +161,14 @@ class App {
             
             if (now - this.lastTriggerTime > delay) {
                 if (this.chuck) {
-                    this.chimeIndex++;
-                    if (this.chimeIndex >= this.totalChimes) {
-                        this.chimeIndex = 0;
+                    if (direction > 0) {
+                        this.chimeIndex++;
+                    } else {
+                        this.chimeIndex--;
                     }
+
+                    if (this.chimeIndex < 0) this.chimeIndex = 0;
+                    if (this.chimeIndex >= this.totalChimes) this.chimeIndex = this.totalChimes - 1;
 
                     const startFreq = 2500;
                     const endFreq = 600;

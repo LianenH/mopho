@@ -2,6 +2,8 @@ import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
 const CHIMES_CODE = `
 global float velocity;
+global float paramThreshold;
+global float paramDensity;
 
 Impulse imp => ResonZ filt => Gain g => NRev rev => dac;
 
@@ -19,15 +21,23 @@ function void play(float vel) {
 }
 
 while(true) {
-    if (velocity > 0.05) {
+    if (velocity > paramThreshold) {
+        
         play(velocity);
         
-        150.0 - (velocity * 120.0) => float delayMs;
-        if (delayMs < 40) 40.0 => delayMs;
+        float density;
+        if (paramDensity < 1) 1 => density;
+        else paramDensity => density;
         
-        Math.random2f(delayMs * 0.8, delayMs * 1.2)::ms => now;
+        0.5::second / density => dur baseDelay;
+        
+        baseDelay * (1.0 - (velocity * 0.5)) => dur actualDelay;
+        if (actualDelay < 30::ms) 30::ms => actualDelay;
+        
+        Math.random2f(0.8, 1.2) * actualDelay => now;
+        
     } else {
-        20::ms => now;
+        10::ms => now;
     }
 }
 `;
@@ -44,7 +54,7 @@ class App {
         this.chuck = null;
         this.isReady = false;
         this.sensorData = { alpha: 0, smoothedAlpha: 0 };
-        this.params = { threshold: 0.0, density: 10 };
+        this.params = { threshold: 0.05, density: 10 };
         
         if (typeof CodeMirror !== 'undefined' && textArea) {
             this.editor = CodeMirror.fromTextArea(textArea, {
@@ -71,7 +81,7 @@ class App {
         });
         
         p1.addEventListener('input', (e) => {
-            const val = e.target.value / 100.0;
+            const val = (e.target.value / 100.0) * 0.5;
             this.params.threshold = val;
             if (this.chuck) this.chuck.setFloat('paramThreshold', val);
         });
@@ -140,13 +150,12 @@ class App {
     loop() {
         this.sensorData.smoothedAlpha += (this.sensorData.alpha - this.sensorData.smoothedAlpha) * 0.1;
         
-        let normalizedVelocity = this.sensorData.smoothedAlpha / 100.0;
+        let normalizedVelocity = this.sensorData.smoothedAlpha / 150.0;
         
-        if (normalizedVelocity < 0.05) normalizedVelocity = 0;
         if (normalizedVelocity > 1.0) normalizedVelocity = 1.0;
 
-        if (normalizedVelocity > 0.1) {
-            btn.style.backgroundColor = "#222";
+        if (normalizedVelocity > this.params.threshold) {
+            btn.style.backgroundColor = "#333";
             btn.style.color = "#fff";
         } else {
             btn.style.backgroundColor = "#fff";
@@ -154,7 +163,7 @@ class App {
         }
 
         if (this.chuck) {
-            this.chuck.setFloat('inputVelocity', normalizedVelocity);
+            this.chuck.setFloat('velocity', normalizedVelocity);
         }
 
         requestAnimationFrame(() => this.loop());
@@ -165,8 +174,10 @@ class App {
         this.chuck.removeLastShred();
         const code = this.getCode();
         await this.chuck.runCode(code);
+        
         this.chuck.setFloat('paramThreshold', this.params.threshold);
         this.chuck.setFloat('paramDensity', this.params.density);
+        
         statusDiv.innerText = "UPDATED";
     }
 }

@@ -5,19 +5,19 @@ global float velocity;
 global float paramThreshold;
 global float paramDensity;
 
-Impulse imp => ResonZ filt => Gain g => NRev rev => dac;
+SinOsc osc => ADSR env => NRev rev => dac;
 
-50.0 => filt.Q;
-5.0 => g.gain;
+0.4 => osc.gain;
 0.1 => rev.mix;
 
+(5::ms, 100::ms, 0.0, 0::ms) => env.set;
+
 function void play(float vel) {
-    Math.random2f(800, 2000) => float freq;
-    freq => filt.freq;
+    Math.random2f(800, 1500) => osc.freq;
     
-    if (vel < 0.2) 0.2 => vel;
-    
-    vel * 100.0 => imp.next;
+    1 => env.keyOn;
+    80::ms => now;
+    1 => env.keyOff;
 }
 
 while(true) {
@@ -32,12 +32,12 @@ while(true) {
         0.5::second / density => dur baseDelay;
         
         baseDelay * (1.0 - (velocity * 0.5)) => dur actualDelay;
-        if (actualDelay < 30::ms) 30::ms => actualDelay;
+        if (actualDelay < 50::ms) 50::ms => actualDelay;
         
         Math.random2f(0.8, 1.2) * actualDelay => now;
         
     } else {
-        10::ms => now;
+        20::ms => now;
     }
 }
 `;

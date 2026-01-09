@@ -1,30 +1,12 @@
 import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
-const CHIMES_CODE = `
-global float impact;
-global Event fire;
-
-// 使用 ADSR 包络，确保声音清晰响亮
-SinOsc osc => ADSR env => NRev rev => dac;
-
+const ONESHOT_CODE = `
+SinOsc osc => ADSR env => dac;
 0.5 => osc.gain;
-0.1 => rev.mix;
-
-// ADSR 设置: 瞬间起音，短衰减
-(1::ms, 80::ms, 0.0, 0::ms) => env.set;
-
-while(true) {
-    // 1. 死等 JS 发送 "fire" 事件
-    // 这样就避开了变量同步失败的问题
-    fire => now;
-    
-    // 2. 收到指令，立刻发声
-    Math.random2f(880, 1760) => osc.freq;
-    1 => env.keyOn;
-    
-    // 3. 强制冷却一小会儿，防止爆音
-    10::ms => now;
-}
+(1::ms, 100::ms, 0.0, 0::ms) => env.set;
+Math.random2f(880, 1760) => osc.freq;
+1 => env.keyOn;
+100::ms => now;
 `;
 
 const btn = document.getElementById('toggleBtn');
@@ -41,17 +23,15 @@ class App {
         
         this.sensorData = { alpha: 0, smoothedAlpha: 0 };
         this.params = { threshold: 0.05, density: 10 };
-        
-        // JS 端的计时器，用来控制发声频率
-        this.lastTriggerTime = 0; 
+        this.lastTriggerTime = 0;
         
         if (typeof CodeMirror !== 'undefined' && textArea) {
             this.editor = CodeMirror.fromTextArea(textArea, {
                 mode: 'text/x-c++src', theme: 'monokai', lineNumbers: true
             });
-            this.editor.setValue(CHIMES_CODE);
+            this.editor.setValue(ONESHOT_CODE);
         } else if (textArea) {
-            textArea.value = CHIMES_CODE;
+            textArea.value = ONESHOT_CODE;
         }
         
         this.bindEvents();
@@ -60,13 +40,12 @@ class App {
     getCode() {
         if (this.editor) return this.editor.getValue();
         if (textArea) return textArea.value;
-        return CHIMES_CODE;
+        return ONESHOT_CODE;
     }
 
     bindEvents() {
         btn.addEventListener('click', () => {
-            if (!this.isReady) this.init();
-            else this.reloadCode();
+            this.init();
         });
         
         p1.addEventListener('input', (e) => {
@@ -105,17 +84,13 @@ class App {
             }
 
             this.isReady = true;
-            btn.innerText = "UPDATE CODE";
+            btn.innerText = "RUNNING";
             btn.disabled = false;
             statusDiv.innerText = "ONLINE";
             
-            this.reloadCode();
-
-            // 测试音
             await this.chuck.runCode(`
                 SinOsc s => dac; 0.2 => s.gain; 
                 1000 => s.freq; 0.2::second => now; 
-                0.0 => s.gain;
             `);
             
             this.loop();
@@ -140,34 +115,20 @@ class App {
         let normalizedVelocity = this.sensorData.smoothedAlpha / 150.0;
         if (normalizedVelocity > 1.0) normalizedVelocity = 1.0;
 
-        // UI 闪烁逻辑
         if (normalizedVelocity > this.params.threshold) {
             btn.style.backgroundColor = "#333";
             btn.style.color = "#fff";
             
-            // --- JS 触发逻辑 ---
-            // 我们在 JS 里计算“什么时候该响”
-            // 这样就不用依赖 ChucK 的 float 同步了
-            
             const now = Date.now();
+            let delay = 500 / this.params.density;
             
-            // 计算需要的间隔时间 (ms)
-            // 密度 10 -> 间隔 50ms
-            // 密度 1 -> 间隔 500ms
-            // 速度越快 -> 间隔越短
-            let baseDelay = 500 / this.params.density;
-            let dynamicDelay = baseDelay * (1.0 - (normalizedVelocity * 0.5));
-            if (dynamicDelay < 40) dynamicDelay = 40;
+            delay = delay * (1.0 - (normalizedVelocity * 0.5));
+            if (delay < 50) delay = 50;
             
-            // 随机化一点点
-            dynamicDelay *= (0.8 + Math.random() * 0.4);
-
-            if (now - this.lastTriggerTime > dynamicDelay) {
+            if (now - this.lastTriggerTime > delay) {
                 if (this.chuck) {
-                    // 1. 传力度
-                    this.chuck.setFloat('impact', normalizedVelocity);
-                    // 2. 这一句是关键：直接命令 ChucK 发声
-                    this.chuck.broadcastEvent('fire');
+                    const codeToRun = this.getCode();
+                    this.chuck.runCode(codeToRun);
                     this.lastTriggerTime = now;
                 }
             }
@@ -178,14 +139,6 @@ class App {
         }
 
         requestAnimationFrame(() => this.loop());
-    }
-
-    async reloadCode() {
-        if (!this.chuck) return;
-        this.chuck.removeLastShred();
-        const code = this.getCode();
-        await this.chuck.runCode(code);
-        statusDiv.innerText = "UPDATED";
     }
 }
 

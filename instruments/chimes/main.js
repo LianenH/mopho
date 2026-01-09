@@ -3,26 +3,27 @@ import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 const CHIMES_CODE = `
 global float velocity;
 
-ModalBar bar => Gain g => NRev rev => dac;
+Impulse imp => ResonZ filt => Gain g => NRev rev => dac;
 
-1 => bar.preset;
-10.0 => g.gain;
+50.0 => filt.Q;
+5.0 => g.gain;
 0.1 => rev.mix;
 
 function void play(float vel) {
-    Math.random2f(800, 2000) => bar.freq;
+    Math.random2f(800, 2000) => float freq;
+    freq => filt.freq;
     
-    if (vel < 0.4) 0.4 => vel;
+    if (vel < 0.2) 0.2 => vel;
     
-    vel => bar.noteOn;
+    vel * 100.0 => imp.next;
 }
 
 while(true) {
-    if (velocity > 0.02) {
+    if (velocity > 0.05) {
         play(velocity);
         
         150.0 - (velocity * 120.0) => float delayMs;
-        if (delayMs < 50) 50 => delayMs;
+        if (delayMs < 40) 40.0 => delayMs;
         
         Math.random2f(delayMs * 0.8, delayMs * 1.2)::ms => now;
     } else {
@@ -114,8 +115,8 @@ class App {
             this.reloadCode();
 
             await this.chuck.runCode(`
-                SinOsc s => dac; 0.3 => s.gain; 
-                1000 => s.freq; 0.1::second => now; 
+                SinOsc s => dac; 0.2 => s.gain; 
+                880 => s.freq; 0.2::second => now; 
                 0.0 => s.gain;
             `);
             

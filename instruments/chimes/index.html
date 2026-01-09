@@ -12,19 +12,16 @@
         body {
             background-color: #000;
             color: #fff;
-            font-family: 'Courier New', Courier, monospace;
+            font-family: monospace;
             margin: 0;
-
             height: 100vh; 
             height: 100dvh; 
-
             display: flex;
             flex-direction: column;
             box-sizing: border-box;
-            overflow: hidden;
-            
+            overflow: hidden; 
             padding: 20px;
-            padding-bottom: max(20px, env(safe-area-inset-bottom)); 
+            padding-bottom: 40px; 
         }
 
         h1 { 
@@ -46,6 +43,7 @@
         .slider-group { display: flex; align-items: center; justify-content: space-between; }
         label { font-size: 0.9rem; }
         input[type=range] { width: 60%; accent-color: #fff; }
+
         .editor-container { 
             flex-grow: 1; 
             border: 1px solid #333; 
@@ -55,19 +53,8 @@
             margin-bottom: 10px;
         }
 
-        .CodeMirror { 
-            height: 100%; 
-            font-size: 14px; 
-        }
-        
-        #codeEditor { 
-            width: 100%; 
-            height: 100%; 
-            background: #111; 
-            color: #fff; 
-            border: none; 
-            resize: none; 
-        }
+        .CodeMirror { height: 100%; font-size: 14px; }
+        #codeEditor { width: 100%; height: 100%; background: #111; color: #fff; border: none; resize: none; }
         
         button {
             background: #fff;
@@ -78,20 +65,22 @@
             font-weight: bold;
             cursor: pointer;
             text-transform: uppercase;
-            flex-shrink: 0;
+            flex-shrink: 0; 
             height: 60px; 
         }
         
         button:active { background: #ccc; }
         button:disabled { background: #333; color: #666; cursor: not-allowed; }
         
-        #status { 
-            font-size: 0.8rem; 
-            color: #666; 
-            margin-top: 10px; 
-            text-align: right; 
+        #status-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            color: #666;
             flex-shrink: 0; 
         }
+        #sensor-debug { color: #0f0; }
     </style>
 </head>
 <body>
@@ -100,7 +89,7 @@
     <div class="controls">
         <div class="slider-group">
             <label>THRESHOLD</label>
-            <input type="range" id="param1" min="0" max="100" value="10">
+            <input type="range" id="param1" min="0" max="100" value="0">
         </div>
         <div class="slider-group">
             <label>DENSITY</label>
@@ -113,7 +102,11 @@
     </div>
 
     <button id="toggleBtn">INITIALIZE SYSTEM</button>
-    <div id="status">SYSTEM: STANDBY</div>
+    
+    <div id="status-row">
+        <div id="sensor-debug">SENSOR: 0</div>
+        <div id="status">STANDBY</div>
+    </div>
 
     <script src="https://unpkg.com/codemirror@5.65.2/lib/codemirror.js"></script>
     <script src="https://unpkg.com/codemirror@5.65.2/mode/clike/clike.js"></script>

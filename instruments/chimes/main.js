@@ -2,46 +2,54 @@ import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
 function getChimeSound(freq, pan) {
     return `
-    SinOsc car => ADSR env => NRev rev => Pan2 p => dac;
+    // Soft FM Chime
+    SinOsc car => LPF filter => ADSR env => NRev rev => Pan2 p => dac;
     SinOsc mod => car; 
 
+    // Soften the tone
     ${freq.toFixed(2)} => float f;
     ${pan.toFixed(2)} => float panVal;
 
     f => car.freq;
     
-    // Low Gain to prevent clipping
-    0.05 => car.gain;
+    // VERY SAFE GAIN (Prevent clipping)
+    0.02 => car.gain;
 
-    f * 3.5 => mod.freq;
+    // Harmonic Ratio (2.0 = Octave) - Much smoother
+    f * 2.0 => mod.freq;
+    // Modulation Index proportional to freq (Brightness)
     200 => mod.gain;
     2 => car.sync;
+
+    // Cut off piercing highs
+    3000 => filter.freq;
 
     panVal => p.pan;
     0.1 => rev.mix;
 
-    (1::ms, 30::ms, 0.2, 2000::ms) => env.set;
+    // Longer release for ambience
+    (2::ms, 50::ms, 0.1, 1000::ms) => env.set;
 
     1 => env.keyOn;
-    15::ms => now;
+    10::ms => now;
     1 => env.keyOff;
-    2000::ms => now;
+    1000::ms => now;
     `;
 }
 
 const DISPLAY_TEMPLATE = `
-// FM Chime (Anti-Clipping)
-SinOsc car => ADSR env => NRev rev => Pan2 p => dac;
+// Soft FM Chime
+SinOsc car => LPF filter => ADSR env => NRev rev => Pan2 p => dac;
 SinOsc mod => car; 
 
 FREQ => car.freq;
-FREQ * 3.5 => mod.freq;
+FREQ * 2.0 => mod.freq; // Smooth harmonic
 
-// Gain lowered significantly to allow polyphony
-0.05 => car.gain;
+0.02 => car.gain; // Safe volume
+3000 => filter.freq; // Cut sharpness
 
 PAN => p.pan;
-(1::ms, 30::ms, 0.2, 2000::ms) => env.set;
+(2::ms, 50::ms, 0.1, 1000::ms) => env.set;
 `;
 
 const btn = document.getElementById('toggleBtn');
@@ -81,13 +89,11 @@ class App {
         });
         
         p1.addEventListener('input', (e) => {
-            // Friction: 0.80 to 0.99
             const val = 1.0 - (e.target.value / 2000.0);
             this.params.friction = val;
         });
 
         p2.addEventListener('input', (e) => {
-            // Sensitivity
             const val = e.target.value / 50.0;
             this.params.sensitivity = val;
         });
@@ -139,28 +145,21 @@ class App {
     }
 
     handleMotion(e) {
-        // Linear Acceleration X (Left/Right movement)
-        // This is physically moving the phone, not tilting
         const accX = e.acceleration ? e.acceleration.x : 0;
-        
-        // Deadzone to stop drift
         if (Math.abs(accX) < 0.2) return;
-        
-        // Apply Force (F = ma)
-        // Invert X because usually moving right moves content left
         this.velocity -= accX * (0.05 * this.params.sensitivity);
     }
 
     loop() {
-        // Speed Limit (Prevent "Teleporting" through bars)
-        const MAX_SPEED = 1.5;
+        // Speed Limit
+        const MAX_SPEED = 2.0;
         if (this.velocity > MAX_SPEED) this.velocity = MAX_SPEED;
         if (this.velocity < -MAX_SPEED) this.velocity = -MAX_SPEED;
 
         this.virtualPos += this.velocity;
         this.velocity *= this.params.friction;
         
-        // Boundaries (Bounce)
+        // Boundaries
         if (this.virtualPos < 0) {
             this.virtualPos = 0;
             this.velocity *= -0.5;
@@ -170,16 +169,26 @@ class App {
             this.velocity *= -0.5;
         }
         
-        // Trigger Logic
         const currentIdx = Math.floor(this.virtualPos);
         const prevIdx = Math.floor(this.virtualPos - this.velocity);
         
+        // --- ANTI-BURST LOGIC ---
+        // Only trigger if we actually crossed a bar AND moving fast enough
+        // This prevents "jittering" on the edge of a bar causing machine-gun sounds
         if (currentIdx !== prevIdx) {
-            // Only trigger if we moved enough (debounce)
-            this.triggerBar(currentIdx);
+            if (Math.abs(this.velocity) > 0.05) {
+                this.triggerBar(currentIdx);
+                
+                // Visual Feedback
+                cursorDiv.style.opacity = "1";
+                cursorDiv.style.boxShadow = "0 0 20px #fff";
+                setTimeout(() => {
+                    cursorDiv.style.opacity = "0.5";
+                    cursorDiv.style.boxShadow = "0 0 15px #0f0";
+                }, 50);
+            }
         }
 
-        // UI Update
         const pct = (this.virtualPos / this.totalBars) * 100;
         cursorDiv.style.left = pct + "%";
         debugDiv.innerText = "VEL: " + this.velocity.toFixed(2);
@@ -190,9 +199,9 @@ class App {
     triggerBar(index) {
         if (!this.chuck) return;
         
-        // Exponential Pitch Mapping
+        // Freq: 1500Hz -> 600Hz (Softer range)
         const t = index / this.totalBars;
-        const freq = 2000 * Math.pow(0.25, t);
+        const freq = 1500 * Math.pow(0.4, t);
         const pan = (t * 2.0) - 1.0;
         
         const code = getChimeSound(freq, pan);

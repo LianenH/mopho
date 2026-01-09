@@ -1,12 +1,43 @@
 import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
-const ONESHOT_CODE = `
-SinOsc osc => ADSR env => dac;
-0.5 => osc.gain;
-(1::ms, 100::ms, 0.0, 0::ms) => env.set;
-Math.random2f(880, 1760) => osc.freq;
-1 => env.keyOn;
-100::ms => now;
+function getMetalSound(freq) {
+    return `
+    SinOsc car => ADSR env => dac;
+    SinOsc mod => blackhole;
+
+    ${freq.toFixed(2)} => float f;
+    
+    f => car.freq;
+    f * 1.414 => mod.freq;
+    
+    mod => car;
+    2 => car.sync;
+    
+    500 => mod.gain;
+    
+    0.3 => car.gain;
+    
+    (1::ms, 150::ms, 0.0, 0::ms) => env.set;
+    
+    1 => env.keyOn;
+    150::ms => now;
+    `;
+}
+
+const DISPLAY_TEMPLATE = `
+// FM Metal Chime Template
+SinOsc car => ADSR env => dac;
+SinOsc mod => blackhole;
+
+// Frequency injected by JS
+FREQ => car.freq;
+
+// Metal ratio (root 2)
+FREQ * 1.414 => mod.freq;
+
+// Phase Modulation
+mod => car;
+2 => car.sync;
 `;
 
 const btn = document.getElementById('toggleBtn');
@@ -25,22 +56,19 @@ class App {
         this.params = { threshold: 0.05, density: 10 };
         this.lastTriggerTime = 0;
         
+        this.chimeIndex = 0;
+        this.totalChimes = 40;
+        
         if (typeof CodeMirror !== 'undefined' && textArea) {
             this.editor = CodeMirror.fromTextArea(textArea, {
                 mode: 'text/x-c++src', theme: 'monokai', lineNumbers: true
             });
-            this.editor.setValue(ONESHOT_CODE);
+            this.editor.setValue(DISPLAY_TEMPLATE);
         } else if (textArea) {
-            textArea.value = ONESHOT_CODE;
+            textArea.value = DISPLAY_TEMPLATE;
         }
         
         this.bindEvents();
-    }
-
-    getCode() {
-        if (this.editor) return this.editor.getValue();
-        if (textArea) return textArea.value;
-        return ONESHOT_CODE;
     }
 
     bindEvents() {
@@ -88,10 +116,8 @@ class App {
             btn.disabled = false;
             statusDiv.innerText = "ONLINE";
             
-            await this.chuck.runCode(`
-                SinOsc s => dac; 0.2 => s.gain; 
-                1000 => s.freq; 0.2::second => now; 
-            `);
+            const testCode = getMetalSound(1000);
+            await this.chuck.runCode(testCode);
             
             this.loop();
         } catch (e) {
@@ -123,12 +149,23 @@ class App {
             let delay = 500 / this.params.density;
             
             delay = delay * (1.0 - (normalizedVelocity * 0.5));
-            if (delay < 50) delay = 50;
+            if (delay < 40) delay = 40;
             
             if (now - this.lastTriggerTime > delay) {
                 if (this.chuck) {
-                    const codeToRun = this.getCode();
-                    this.chuck.runCode(codeToRun);
+                    this.chimeIndex++;
+                    if (this.chimeIndex >= this.totalChimes) {
+                        this.chimeIndex = 0;
+                    }
+
+                    const startFreq = 2500;
+                    const endFreq = 600;
+                    const step = (startFreq - endFreq) / this.totalChimes;
+                    const currentFreq = startFreq - (this.chimeIndex * step);
+                    
+                    const code = getMetalSound(currentFreq);
+                    this.chuck.runCode(code);
+                    
                     this.lastTriggerTime = now;
                 }
             }

@@ -1,50 +1,59 @@
 import { Chuck } from 'https://cdn.jsdelivr.net/npm/webchuck/+esm';
 
-function getMetalSound(freq) {
+function getChimeSound(freq, pan, reverbAmount) {
     return `
-    SinOsc fund => ADSR env => NRev rev => dac;
-    SinOsc over => env;
-    
-    env => Delay d => d => rev;
+    SinOsc car => ADSR env => NRev rev => Pan2 p => dac;
+    SinOsc mod => car; // FM Synthesis
 
+    // Parameters
     ${freq.toFixed(2)} => float f;
-    
-    f => fund.freq;
-    f * 2.76 => over.freq;
-    
-    0.4 => fund.gain;
-    0.1 => over.gain;
-    
-    0.2 => rev.mix;
-    
-    120::ms => d.max => d.delay;
-    0.6 => d.gain;
-    
-    (2::ms, 200::ms, 0.0, 0::ms) => env.set;
-    
+    ${pan.toFixed(2)} => float panVal;
+    ${reverbAmount.toFixed(2)} => float revMix;
+
+    // Carrier
+    f => car.freq;
+    0.3 => car.gain;
+
+    // Modulator (The metal texture)
+    // Ratio 3.5 creates bell-like inharmonic partials
+    f * 3.5 => mod.freq;
+    200 => mod.gain;
+    2 => car.sync; // FM Sync
+
+    // Panning (Low notes left, High notes right)
+    panVal => p.pan;
+
+    // Reverb
+    revMix => rev.mix;
+
+    // Envelope (Sharp attack, long release)
+    (1::ms, 20::ms, 0.4, 3000::ms) => env.set;
+
     1 => env.keyOn;
-    200::ms => now;
+    10::ms => now;
+    1 => env.keyOff;
+    3000::ms => now;
     `;
 }
 
 const DISPLAY_TEMPLATE = `
-// Metal Chime Generator
-SinOsc fund => ADSR env => NRev rev => dac;
-SinOsc over => env; // Overtone
-env => Delay d => d => rev; // Sparkle
+// FM Metal Chime (Polyphonic)
+SinOsc car => ADSR env => NRev rev => Pan2 p => dac;
+SinOsc mod => car; 
 
-FREQ => fund.freq;
-FREQ * 2.76 => over.freq; // 2.76 is physical bar ratio
+FREQ => car.freq;
+FREQ * 3.5 => mod.freq; // Inharmonic Ratio
 
-0.2 => rev.mix;
-120::ms => d.delay;
-0.6 => d.gain;
+PAN => p.pan;
+REVERB => rev.mix;
+
+(1::ms, 20::ms, 0.4, 3000::ms) => env.set;
 `;
 
 const btn = document.getElementById('toggleBtn');
 const statusDiv = document.getElementById('status');
-const debugDiv = document.getElementById('sensor-debug');
-const dirDiv = document.getElementById('direction-debug');
+const debugDiv = document.getElementById('debug-info');
+const cursorDiv = document.getElementById('visual-cursor');
 const p1 = document.getElementById('param1');
 const p2 = document.getElementById('param2');
 const textArea = document.getElementById('codeEditor');
@@ -54,12 +63,12 @@ class App {
         this.chuck = null;
         this.isReady = false;
         
-        this.sensorData = { alpha: 0, smoothedAlpha: 0 };
-        this.params = { threshold: 0.05, density: 10 };
-        this.lastTriggerTime = 0;
+        // Physics State
+        this.virtualPos = 20.0; // 0 to 40
+        this.velocity = 0.0;
+        this.totalBars = 40;
         
-        this.chimeIndex = 20;
-        this.totalChimes = 40;
+        this.params = { friction: 0.9, reverb: 0.5 };
         
         if (typeof CodeMirror !== 'undefined' && textArea) {
             this.editor = CodeMirror.fromTextArea(textArea, {
@@ -79,13 +88,15 @@ class App {
         });
         
         p1.addEventListener('input', (e) => {
-            const val = (e.target.value / 100.0) * 0.5;
-            this.params.threshold = val;
+            // Friction/Drag: Lower value = more slippery
+            // Map 1-100 to 0.8 - 0.99
+            const val = 1.0 - (e.target.value / 1000.0);
+            this.params.friction = val;
         });
 
         p2.addEventListener('input', (e) => {
-            const val = parseFloat(e.target.value);
-            this.params.density = val;
+            const val = e.target.value / 100.0;
+            this.params.reverb = val;
         });
     }
 
@@ -115,10 +126,16 @@ class App {
 
             this.isReady = true;
             btn.innerText = "RUNNING";
+            btn.style.background = "#fff";
             btn.disabled = false;
             statusDiv.innerText = "ONLINE";
             
-            await this.chuck.runCode(getMetalSound(1000));
+            // Warm up
+            await this.chuck.runCode(`
+                SinOsc s => dac; 0.1 => s.gain; 
+                880 => s.freq; 0.1::second => now; 
+                0.0 => s.gain;
+            `);
             
             this.loop();
         } catch (e) {
@@ -131,63 +148,79 @@ class App {
 
     handleMotion(e) {
         const r = e.rotationRate || {};
-        const alpha = r.alpha || 0;
-        this.sensorData.alpha = alpha;
+        // Use alpha (Z-axis rotation) for horizontal swiping
+        const inputForce = r.alpha || 0;
         
-        debugDiv.innerText = "SPD: " + Math.abs(alpha).toFixed(0);
+        // Apply physics impulse
+        // Sensitivity scaling
+        this.velocity += inputForce * 0.005; 
     }
 
     loop() {
-        this.sensorData.smoothedAlpha += (this.sensorData.alpha - this.sensorData.smoothedAlpha) * 0.1;
+        // 1. Apply Physics (Inertia & Friction)
+        this.virtualPos += this.velocity;
+        this.velocity *= this.params.friction; // Drag
         
-        const velocity = Math.abs(this.sensorData.smoothedAlpha);
-        const direction = Math.sign(this.sensorData.smoothedAlpha);
+        // 2. Boundary Bounce (Keep cursor inside 0-40)
+        if (this.virtualPos < 0) {
+            this.virtualPos = 0;
+            this.velocity *= -0.5; // Bounce
+        }
+        if (this.virtualPos > this.totalBars) {
+            this.virtualPos = this.totalBars;
+            this.velocity *= -0.5; // Bounce
+        }
         
-        let normalizedVelocity = velocity / 150.0;
-        if (normalizedVelocity > 1.0) normalizedVelocity = 1.0;
-
-        if (direction > 0) dirDiv.innerText = "DIR: >>>";
-        else dirDiv.innerText = "DIR: <<<";
-
-        if (normalizedVelocity > this.params.threshold) {
-            btn.style.backgroundColor = "#333";
-            btn.style.color = "#fff";
+        // 3. Collision Detection
+        // Did we cross an integer boundary?
+        const currentIdx = Math.floor(this.virtualPos);
+        const prevIdx = Math.floor(this.virtualPos - this.velocity);
+        
+        if (currentIdx !== prevIdx) {
+            // We crossed a bar! Trigger sound.
+            // Determine range of bars crossed (for very fast swipes)
+            const start = Math.min(prevIdx, currentIdx);
+            const end = Math.max(prevIdx, currentIdx);
             
-            const now = Date.now();
-            let delay = 500 / this.params.density;
-            
-            delay = delay * (1.0 - (normalizedVelocity * 0.5));
-            if (delay < 40) delay = 40;
-            
-            if (now - this.lastTriggerTime > delay) {
-                if (this.chuck) {
-                    if (direction > 0) {
-                        this.chimeIndex++;
-                    } else {
-                        this.chimeIndex--;
-                    }
-
-                    if (this.chimeIndex < 0) this.chimeIndex = 0;
-                    if (this.chimeIndex >= this.totalChimes) this.chimeIndex = this.totalChimes - 1;
-
-                    const startFreq = 2500;
-                    const endFreq = 600;
-                    const step = (startFreq - endFreq) / this.totalChimes;
-                    const currentFreq = startFreq - (this.chimeIndex * step);
-                    
-                    const code = getMetalSound(currentFreq);
-                    this.chuck.runCode(code);
-                    
-                    this.lastTriggerTime = now;
-                }
+            // Limit chords to prevent CPU overload on crazy swipes
+            const count = end - start;
+            if (count < 5) {
+                // Trigger the specific bar(s)
+                this.triggerBar(currentIdx);
             }
-
-        } else {
-            btn.style.backgroundColor = "#fff";
-            btn.style.color = "#000";
         }
 
+        // 4. Visual Update
+        const pct = (this.virtualPos / this.totalBars) * 100;
+        cursorDiv.style.left = pct + "%";
+        debugDiv.innerText = "BAR: " + currentIdx;
+
         requestAnimationFrame(() => this.loop());
+    }
+    
+    triggerBar(index) {
+        if (!this.chuck) return;
+        
+        // Map index (0-40) to Frequency (Exponential Curve)
+        // High -> Low or Low -> High
+        // Real chimes usually go High (short) to Low (long)
+        
+        // Start: 2000Hz, End: 400Hz
+        // Exponential mapping looks more natural
+        const t = index / this.totalBars;
+        const freq = 2000 * Math.pow(0.2, t);
+        
+        // Stereo Panning
+        // 0 -> -1.0 (Left), 40 -> 1.0 (Right)
+        const pan = (t * 2.0) - 1.0;
+        
+        // Trigger
+        const code = getChimeSound(freq, pan, this.params.reverb);
+        this.chuck.runCode(code);
+        
+        // Visual Flash
+        document.body.style.backgroundColor = "#111";
+        setTimeout(() => document.body.style.backgroundColor = "#050505", 20);
     }
 }
 
